@@ -78,8 +78,15 @@ public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements 
 
         for (ModuleContainer<T, M, L> container: modules.values()) {
             if (container.isLoaded()) {
-                container.postLoad(this);
-            } else if (container.isCritical()) {
+                try {
+                    container.postLoad(this);
+                    continue;
+                } catch (Exception exception) {
+                    eventHandle.loadingException(exception);
+                }
+            }
+
+            if (container.isCritical()) {
                 unload();
                 throw new DModuleResolveException("Circular reference.", container.getLoader().getId());
             }

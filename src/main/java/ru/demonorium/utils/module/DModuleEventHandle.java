@@ -2,6 +2,11 @@ package ru.demonorium.utils.module;
 
 import java.io.Serializable;
 
+/**
+ * Interface for logging events
+ *
+ * @param <T> - id type
+ */
 public interface DModuleEventHandle<T> extends Serializable {
     void optionalModuleDependencyNotRegistered(T id, T dependency);
     void loadingException(Exception exception);

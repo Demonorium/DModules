@@ -1,5 +1,8 @@
 package ru.demonorium.utils.module.exception;
 
+/**
+ * Critical exception in tree construction or in critical module loading
+ */
 public class DModuleResolveException extends DModuleException {
     public <T> DModuleResolveException(String message, T id) {
         super(message, "dependency tree iteration", id);
