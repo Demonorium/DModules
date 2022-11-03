@@ -47,31 +47,55 @@ public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements 
 
     @Override
     public void load() throws DModuleResolveException {
+        ModuleContainer[] toLoad = new ModuleContainer[modules.size()];
+        int size = 0;
+
         for (ModuleContainer<T, M, L> container: modules.values()) {
             Set<T> dependencies = container.getLoader().getDependencies();
-            for (T dependency: dependencies) {
-                ModuleContainer<T, M, L> extracted = modules.get(dependency);
-                if (extracted == null) {
-                    if (container.isCritical()) {
-                        unload();
-                        throw new DModuleResolveException("Dependency '" + dependency + "' is not loaded for critical module.", container.getLoader().getId());
+            if (dependencies.size() == 0) {
+                toLoad[size++] = container;
+            } else {
+                for (T dependency : dependencies) {
+                    ModuleContainer<T, M, L> extracted = modules.get(dependency);
+                    if (extracted == null) {
+                        if (container.isCritical()) {
+                            unload();
+                            throw new DModuleResolveException("Dependency '" + dependency + "' is not loaded for critical module.", container.getLoader().getId());
+                        } else {
+                            eventHandle.optionalModuleDependencyNotRegistered(container.getLoader().getId(), dependency);
+                        }
                     } else {
-                        eventHandle.optionalModuleDependencyNotRegistered(container.getLoader().getId(), dependency);
+                        extracted.getDependents().add(container);
                     }
-                } else {
-                    extracted.getDependents().add(container);
                 }
             }
         }
 
-        for (ModuleContainer<T, M, L> container: modules.values()) {
-            if (!container.isLoaded() && container.getLoader().getDependencies().isEmpty()) {
-                try {
-                    loadModule(container);
-                } catch (DModuleResolveException exception) {
-                    throw exception;
-                } catch (DModuleException exception) {
-                    eventHandle.loadingException(exception);
+        int lastSize = size;
+        for (int i = size; i <= lastSize; ++i) {
+            if (i == lastSize) {
+                if (size == 0) break;
+
+                lastSize = size;
+                size = 0;
+                i = 0;
+            }
+
+            ModuleContainer<T, M, L> container = toLoad[i];
+            try {
+                loadModule(container);
+            } catch (DModuleResolveException exception) {
+                throw exception;
+            } catch (DModuleException exception) {
+                eventHandle.loadingException(exception);
+                continue;
+            }
+
+            for (ModuleContainer<T, M, L> dependent: container.getDependents()) {
+                if (dependent.getDependencies() == 1) {
+                    toLoad[size++] = dependent;
+                } else {
+                    dependent.setDependencies(dependent.getDependencies() - 1);
                 }
             }
         }
@@ -117,18 +141,6 @@ public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements 
             }
 
             throw new DModuleLoadingException(exception, container.getLoader().getId());
-        }
-
-        for (ModuleContainer<T, M, L> dependent: container.getDependents()) {
-            if (dependent.getDependencies() == 1) {
-                try {
-                    loadModule(dependent);
-                } catch (DModuleLoadingException exception) {
-                    eventHandle.loadingException(exception);
-                }
-            } else {
-                dependent.setDependencies(dependent.getDependencies() - 1);
-            }
         }
     }
 

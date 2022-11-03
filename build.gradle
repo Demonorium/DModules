@@ -1,9 +1,18 @@
 plugins {
     id 'java'
+    id 'signing'
+    id 'maven-publish'
 }
 
-group 'org.example'
+group 'ru.demonorium'
 version '1.0-SNAPSHOT'
+
+JavaVersion javaVersion = JavaVersion.VERSION_13
+project.ext.set('author', 'Demonorium')
+project.ext.set('authorUrl', 'https://github.com/' + project.author)
+project.ext.set('projectRepository', project.authorUrl + '/' + rootProject.name)
+project.ext.set('projectScm', project.projectRepository + '.git')
+project.ext.set('mail', 'demonorium@yandex.ru')
 
 repositories {
     mavenCentral()
@@ -16,4 +25,82 @@ dependencies {
 
 test {
     useJUnitPlatform()
+}
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
+}
+
+/**
+ * POM generation
+ */
+def customizePom(pom) {
+    pom.withXml {
+        def root = asNode()
+
+        root.dependencies.removeAll { dep ->
+            dep.scope == "test"
+        }
+
+        root.children().last() + {
+            description 'Simple module system for java'
+            name rootProject.name
+            url project.projectRepository
+            organization {
+                name group
+                url project.authorUrl
+            }
+            issueManagement {
+                system 'GitHub'
+                url project.projectRepository+'/issues'
+            }
+            licenses {
+                license {
+                    name 'Creative Commons Zero v1.0 Universal'
+                    url 'https://creativecommons.org/publicdomain/zero/1.0/'
+                }
+            }
+            scm {
+                url project.projectRepository
+                connection 'scm:' + project.projectScm
+                developerConnection 'scm:git://github.com/' + project.author + '/' + rootProject.name '.git'
+            }
+            developers {
+                developer {
+                    id project.author
+                    name project.author
+                    email project.mail
+                }
+            }
+        }
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            customizePom(pom)
+            groupId group
+            artifactId archivesBaseName
+            version version
+
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+            credentials {
+                username sonatypeUsername
+                password sonatypePassword
+            }
+        }
+    }
+}
+
+signing {
+    sign publishing.publications
 }

@@ -14,7 +14,7 @@ public interface DModuleEventHandle<T> extends Serializable {
     void moduleCleaned(T id);
     void moduleRegistered(T id);
 
-    public static final DModuleEventHandle STUB_HANDLE = new DModuleEventHandle() {
+    DModuleEventHandle STUB_HANDLE = new DModuleEventHandle() {
         @Override
         public void optionalModuleDependencyNotRegistered(Object id, Object dependency) {
 
