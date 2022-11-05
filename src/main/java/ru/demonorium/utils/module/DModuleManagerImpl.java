@@ -6,10 +6,12 @@ import ru.demonorium.utils.module.exception.DModuleResolveException;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements Serializable, DModuleManager<T, M, L> {
     private final Map<T, ModuleContainer<T, M, L>> modules = new HashMap<>();
     private DModuleEventHandle<T> eventHandle;
+    private ModuleContainer[] containers;
 
     public DModuleManagerImpl(DModuleEventHandle<T> eventHandle) {
         this.eventHandle = eventHandle;
@@ -23,6 +25,7 @@ public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements 
     public void register(L loader, boolean critical) {
         this.modules.put(loader.getId(), new ModuleContainer<>(loader, critical));
         eventHandle.moduleRegistered(loader.getId());
+        containers = null;
     }
 
     @Override
@@ -36,7 +39,21 @@ public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements 
     }
 
     @Override
+    public L getLoader(T key) {
+        ModuleContainer<T, M, L> container = modules.get(key);
+        if (container == null) {
+            return null;
+        }
+
+        return container.getLoader();
+    }
+
+    @Override
     public boolean isLoaded(T id) {
+        if (containers == null) {
+            return false;
+        }
+
         ModuleContainer<T, M, L> result = modules.get(id);
         if (result == null) {
             return false;
@@ -46,14 +63,19 @@ public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements 
     }
 
     @Override
-    public void load() throws DModuleResolveException {
-        ModuleContainer[] toLoad = new ModuleContainer[modules.size()];
+    public boolean isRegistered(T key) {
+        return modules.containsKey(key);
+    }
+
+
+    private int initContainers() throws DModuleResolveException {
+        containers = new ModuleContainer[modules.size()];
         int size = 0;
 
         for (ModuleContainer<T, M, L> container: modules.values()) {
             Set<T> dependencies = container.getLoader().getDependencies();
             if (dependencies.size() == 0) {
-                toLoad[size++] = container;
+                containers[size++] = container;
             } else {
                 for (T dependency : dependencies) {
                     ModuleContainer<T, M, L> extracted = modules.get(dependency);
@@ -71,34 +93,58 @@ public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements 
             }
         }
 
-        int lastSize = size;
-        for (int i = size; i <= lastSize; ++i) {
-            if (i == lastSize) {
-                if (size == 0) break;
+        return size;
+    }
 
-                lastSize = size;
-                size = 0;
-                i = 0;
-            }
+    private void constructSequence() throws DModuleResolveException {
+        try {
+            int size = initContainers();
 
-            ModuleContainer<T, M, L> container = toLoad[i];
-            try {
-                loadModule(container);
-            } catch (DModuleResolveException exception) {
-                throw exception;
-            } catch (DModuleException exception) {
-                eventHandle.loadingException(exception);
-                continue;
-            }
-
-            for (ModuleContainer<T, M, L> dependent: container.getDependents()) {
-                if (dependent.getDependencies() == 1) {
-                    toLoad[size++] = dependent;
-                } else {
-                    dependent.setDependencies(dependent.getDependencies() - 1);
+            for (int i = 0; i < size; ++i) {
+                ModuleContainer<T, M, L> container = containers[i];
+                for (ModuleContainer<T, M, L> dependent: container.getDependents()) {
+                    if (dependent.getDependencies() == 1) {
+                        containers[size++] = dependent;
+                    } else {
+                        dependent.setDependencies(dependent.getDependencies() - 1);
+                    }
                 }
             }
+        } catch (ArrayIndexOutOfBoundsException outOfBoundsException) {
+            unload();
+            throw new DModuleResolveException("Circular reference.", containers[containers.length - 1]);
         }
+    }
+
+    @Override
+    public void load() throws DModuleResolveException {
+        try {
+            int size = initContainers();
+
+            for (int i = 0; i < size; ++i) {
+                ModuleContainer<T, M, L> container = containers[i];
+                try {
+                    loadModule(container);
+                } catch (DModuleResolveException exception) {
+                    throw exception;
+                } catch (DModuleException exception) {
+                    eventHandle.loadingException(exception);
+                    continue;
+                }
+
+                for (ModuleContainer<T, M, L> dependent: container.getDependents()) {
+                    if (dependent.getDependencies() == 1) {
+                        containers[size++] = dependent;
+                    } else {
+                        dependent.setDependencies(dependent.getDependencies() - 1);
+                    }
+                }
+            }
+        } catch (ArrayIndexOutOfBoundsException outOfBoundsException) {
+            unload();
+            throw new DModuleResolveException("Circular reference.", containers[containers.length - 1]);
+        }
+
 
         for (ModuleContainer<T, M, L> container: modules.values()) {
             if (container.isLoaded()) {
@@ -117,13 +163,39 @@ public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements 
         }
     }
 
+    @Override
+    public List<L> getLoadingSequence() throws DModuleResolveException {
+        if (containers == null) {
+            constructSequence();
+        }
+
+        return Arrays.stream((ModuleContainer<T, M, L>[])containers)
+                .filter(Objects::nonNull)
+                .map(ModuleContainer::getLoader)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<M> getModulesSequence() throws DModuleResolveException {
+        if (containers == null) {
+            constructSequence();
+        }
+
+        return Arrays.stream((ModuleContainer<T, M, L>[])containers)
+                .filter(Objects::nonNull)
+                .filter(ModuleContainer::isLoaded)
+                .map(ModuleContainer::getResource)
+                .collect(Collectors.toList());
+    }
+
     private void loadModule(ModuleContainer<T, M, L> container) throws DModuleException {
         try {
             container.load(this);
             eventHandle.moduleLoaded(container.getLoader().getId());
         } catch (Exception exception) {
             if (container.isCritical()) {
-                throw new DModuleLoadingException(exception, container.getLoader().getId());
+                unload();
+                throw new DModuleResolveException("Critical module loading failed!", exception, container.getLoader().getId());
             } else {
                 for (ModuleContainer<T, M, L> dependent: container.getDependents()) {
                     Set<T> dependencies = dependent.getLoader().getDependencies();
