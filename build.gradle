@@ -5,7 +5,8 @@ plugins {
 }
 
 group 'ru.demonorium'
-version System.getenv('RELEASE_VERSION') ?: "1.1"
+version "1.2"
+description 'Simple module system'
 
 JavaVersion javaVersion = JavaVersion.VERSION_13
 project.ext.set('author', 'Demonorium')
@@ -20,7 +21,7 @@ repositories {
 }
 
 dependencies {
-    implementation('ru.demonorium:DConcepts:1.0')
+    implementation('ru.demonorium:DConcepts:'+version)
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.7.0'
 }
@@ -48,7 +49,7 @@ def customizePom(pom) {
         }
 
         root.children().last() + {
-            description 'Simple module system for java'
+            description rootProject.description
             name rootProject.name
             url project.projectRepository
             organization {
@@ -61,8 +62,8 @@ def customizePom(pom) {
             }
             licenses {
                 license {
-                    name 'Creative Commons Zero v1.0 Universal'
-                    url 'https://creativecommons.org/publicdomain/zero/1.0/'
+                    name 'Apache License 2.0'
+                    url 'https://www.apache.org/licenses/LICENSE-2.0'
                 }
             }
             scm {
