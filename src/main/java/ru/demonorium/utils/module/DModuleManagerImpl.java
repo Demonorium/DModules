@@ -73,7 +73,7 @@ public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements 
         int size = 0;
 
         for (ModuleContainer<T, M, L> container: modules.values()) {
-            Set<T> dependencies = container.getLoader().getDependencies();
+            Collection<T> dependencies = container.getLoader().getDependencies();
             if (dependencies.size() == 0) {
                 containers[size++] = container;
             } else {
@@ -198,7 +198,7 @@ public class DModuleManagerImpl<T, M, L extends DModuleLoader<T, M>> implements 
                 throw new DModuleResolveException("Critical module loading failed!", exception, container.getLoader().getId());
             } else {
                 for (ModuleContainer<T, M, L> dependent: container.getDependents()) {
-                    Set<T> dependencies = dependent.getLoader().getDependencies();
+                    Collection<T> dependencies = dependent.getLoader().getDependencies();
                     for (T dependency: dependencies) {
                         if (dependency.equals(container.getLoader().getId())) {
                             if (dependent.isCritical()) {

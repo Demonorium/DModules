@@ -1,5 +1,7 @@
 package ru.demonorium.utils.module;
 
+import ru.demonorium.concepts.data.has.HasDependencies;
+import ru.demonorium.concepts.data.has.HasId;
 import ru.demonorium.utils.module.exception.DModuleLoadingException;
 
 import java.util.Set;
@@ -10,14 +12,7 @@ import java.util.Set;
  * @param <T> - id type
  * @param <M> - result type
  */
-public interface DModuleLoader<T, M> {
-    /**
-     * Unique id of module.
-     *
-     * @return id
-     */
-    T getId();
-
+public interface DModuleLoader<T, M> extends HasId<T>, HasDependencies<T> {
     /**
      * Load/Create data and then return it.
      *
@@ -34,10 +29,6 @@ public interface DModuleLoader<T, M> {
      * @param data - loaded data
      */
     void postLoad(DModuleManager<T, M, ? extends DModuleLoader<T, M>> manager, M data);
-
-    default Set<T> getDependencies() {
-        return Set.of();
-    }
 
     default void error(String reason) throws DModuleLoadingException {
         throw new DModuleLoadingException(reason, getId());
